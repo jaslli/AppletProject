@@ -1,7 +1,9 @@
 package com.yww.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
+import com.yww.entity.Plan;
 import com.yww.entity.Video;
+import com.yww.entity.VideoVo;
 import org.springframework.stereotype.Repository;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -77,4 +79,14 @@ public interface VideoService extends IService<Video> {
      * @return      视频播放地址
      */
     String getUrl(String videoId);
+
+    /**
+     * 获取当天计划的所有视频
+     */
+    List<VideoVo> getVideo(Plan plan, String key, int day);
+
+    /**
+     * 根据openid获取当天全部视频
+     */
+    List<VideoVo> getAllVideo(List<Plan> planList,String openid, String date);
 }

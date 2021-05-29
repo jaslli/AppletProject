@@ -29,11 +29,26 @@ public interface PlanService extends IService<Plan> {
      * @return  该月的状态
      * @exception ParseException 异常
      */
-    List<Integer> indexPlan(String id,String date) throws ParseException;
+    List<Integer> indexPlan(String id, String date) throws ParseException;
 
     /**
      * 展示所有计划
      * @return  计划列表
      */
     List<PlanVo> getPlan();
+
+    /**
+     * 根据openid获取所有计划的显示
+     * @param planList 计划列表
+     * @param date 日期字符串
+     */
+    List<Integer> getIndexPlan1(List<Plan> planList,String date) throws ParseException;
+
+    /**
+     * 根据openid获取所有计划的显示，都完成才显示打卡成功
+     * @param planList 计划列表
+     * @param date 日期字符串
+     */
+    List<Integer> getIndexPlan2(List<Plan> planList,String date) throws ParseException;
+
 }

@@ -1,9 +1,12 @@
 package com.yww.controller;
 
 
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.yww.Result.Result;
 import com.yww.entity.Plan;
 import com.yww.entity.Video;
+import com.yww.entity.VideoVo;
+import com.yww.handler.ProjectException;
 import com.yww.service.PlanService;
 import com.yww.service.VideoService;
 import com.yww.utils.RedisUtil;
@@ -119,6 +122,9 @@ public class VideoController {
             @ApiParam(name = "date",value = "当前日期",required = true)
             @PathVariable("date") String date) {
         Plan plan = planService.getById(id);
+        if (plan == null) {
+            throw new ProjectException(20001,"没有计划");
+        }
         String key = date.substring(0,date.lastIndexOf('-')) + "+" + id + plan.getOpenid();
         int day = Integer.parseInt(date.substring(date.lastIndexOf('-') + 1));
         if (!util.checkSign(key + "-0",day - 1)) {
@@ -127,28 +133,38 @@ public class VideoController {
         if (plan.getComplete() == 1) {
             return Result.ok().message("该计划已经全部完成了");
         }
-        // 获取视频信息，增加播放量
-        List<Video> videoList = videoService.getByClass2(plan.getName(),"day" + plan.getProgress());
-        for (Video video : videoList) {
-            if (util.getScore("video",video.getVideoId()) == null) {
-                util.addZset("video",video.getVideoId(),1);
-            } else {
-                util.incrementScore("video",video.getVideoId(),1);
-            }
-        }
-        if (plan.getProgress() + 1 == plan.getExtent()) {
-            plan.setComplete(1);
-        }
-        // 判断该天的计划是否已经进行增加
-        if (!videoService.isAdded(plan.getUpdatetime())) {
-            plan.setProgress(plan.getProgress() + 1);
-            planService.updateById(plan);
-            util.doSign(key + "-1",day - 1);
-        }
-        return Result.ok().data("videoList",videoList);
+        return Result.ok().data("videoList",videoService.getVideo(plan, key, day));
     }
 
-    @ApiOperation("视频上传")
+    @ApiOperation("根据openid获取当天的学习计划视频")
+    @GetMapping("getAllVideo/{openid}/{date}")
+    public Result getAllVideo(
+            @ApiParam(name = "openid",value = "微信openid",required = true)
+            @PathVariable("openid") String openid,
+            @ApiParam(name = "date",value = "当前日期",required = true)
+            @PathVariable("date") String date) {
+        QueryWrapper<Plan> wrapper = new QueryWrapper<>();
+        wrapper.eq("openid",openid);
+        List<Plan> planList = planService.list(wrapper);
+        if (planList.size() == 0) {
+            throw new ProjectException(20002,"当前用户没有计划！");
+        }
+        if (planList.size() == 1) {
+            return getPlanVideo(planList.get(0).getId(),date);
+        } else {
+            List<VideoVo> videoList = videoService.getAllVideo(planList,openid,date);
+            return Result.ok().data("videoList",videoList);
+        }
+    }
+
+    @ApiOperation("修改视频信息（测试）")
+    @PutMapping("updateVideo")
+    public Result updateVideo(@RequestBody Video video) {
+        videoService.updateById(video);
+        return Result.ok();
+    }
+
+    @ApiOperation("视频上传(不要用)")
     @PostMapping("uploadVideo")
     public Result uploadVideo(MultipartFile file) {
         String videoId = videoService.uploadVideoAliyun(file);
@@ -157,6 +173,13 @@ public class VideoController {
         video.setVideoId(videoId);
         videoService.save(video);
         return Result.ok().data("videoId",videoId);
+    }
+
+    @ApiOperation("删除缓存")
+    @GetMapping("del/{videoId}")
+    public Result del(@PathVariable("videoId") String videoId){
+        util.deletekey("video",videoId);
+        return Result.ok();
     }
 
 }

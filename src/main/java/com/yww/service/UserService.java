@@ -24,4 +24,11 @@ public interface UserService extends IService<User> {
      * @return          当前的年龄
      */
     int getAge(Date birthday);
+
+    /**
+     * 获取使用的天数
+     * @param user 用户
+     * @return 使用的天数
+     */
+    int getUsed(User user);
 }

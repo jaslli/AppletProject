@@ -72,4 +72,18 @@ public class UserServiceImpl extends ServiceImpl<UserMapper,User> implements Use
         return age;
     }
 
+    /**
+     * 获取使用的天数
+     * @param user 用户
+     * @return 使用的天数
+     */
+    @Override
+    public int getUsed(User user) {
+        Date create = user.getCreatetime();
+        Date now = new Date();
+        long ll = now.getTime() - create.getTime();
+        double day = ll * (1.1574e-8);
+        return (int)day;
+    }
+
 }

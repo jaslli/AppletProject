@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.Date;
 import java.util.List;
+import java.util.WeakHashMap;
 
 /**
  * <p>
@@ -85,6 +86,16 @@ public class UserController {
     public Result updateUser(@RequestBody User user) {
         userService.updateUser(user);
         return Result.ok();
+    }
+
+    @ApiImplicitParam(name = "openid", value = "用户的openid", required = true)
+    @ApiOperation("获取用户使用时间(返回使用的天数)")
+    @GetMapping("/getUsed/{openid}")
+    public Result getUsed(@PathVariable("openid")String openid) {
+        QueryWrapper<User> wrapper = new QueryWrapper<>();
+        wrapper.eq("openid", openid);
+        User user = userService.getOne(wrapper);
+        return Result.ok().data("time",userService.getUsed(user));
     }
 
 }

@@ -61,6 +61,10 @@ public class RedisUtil {
         redisTemplate.opsForZSet().incrementScore(sortedSetKey,member,score);
     }
 
+    public void deletekey(String sortedSetKey,Object member) {
+        redisTemplate.opsForZSet().remove(sortedSetKey,member);
+    }
+
     // *****************bitMap****************************
 
     /**

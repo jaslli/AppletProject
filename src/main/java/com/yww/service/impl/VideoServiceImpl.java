@@ -9,12 +9,16 @@ import com.aliyuncs.vod.model.v20170321.GetPlayInfoRequest;
 import com.aliyuncs.vod.model.v20170321.GetPlayInfoResponse;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.yww.entity.Plan;
 import com.yww.entity.Video;
+import com.yww.entity.VideoVo;
 import com.yww.mapper.VideoMapper;
+import com.yww.service.PlanService;
 import com.yww.service.VideoService;
 import com.yww.utils.ConstantVodUtils;
 import com.yww.utils.InitVod;
 import com.yww.utils.RedisUtil;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -46,6 +50,9 @@ public class VideoServiceImpl extends ServiceImpl<VideoMapper, Video> implements
     @Resource
     private RedisUtil util;
 
+    @Autowired
+    private PlanService planService;
+
 
     /**
      * 完善视频实体的信息，获取视频播放地址和封面地址
@@ -64,9 +71,7 @@ public class VideoServiceImpl extends ServiceImpl<VideoMapper, Video> implements
             GetPlayInfoResponse response = client.getAcsResponse(request);
             // 获取播放地址
             List<GetPlayInfoResponse.PlayInfo> playInfoList = response.getPlayInfoList();
-            for (GetPlayInfoResponse.PlayInfo playInfo : playInfoList) {
-                url = playInfo.getPlayURL();
-            }
+            url = playInfoList.get(0).getPlayURL();
             video.setUrl(url);
             // 获取封面
             cover = response.getVideoBase().getCoverURL();
@@ -94,6 +99,11 @@ public class VideoServiceImpl extends ServiceImpl<VideoMapper, Video> implements
         }
         List<Video> videoList = baseMapper.selectList(wrapper);
         setList(videoList);
+        for (Video video : videoList) {
+            String name = video.getName();
+            name = name.substring(0,name.lastIndexOf("."));
+            video.setName(name);
+        }
         return videoList;
     }
 
@@ -114,6 +124,16 @@ public class VideoServiceImpl extends ServiceImpl<VideoMapper, Video> implements
         }
         List<Video> videoList = baseMapper.selectList(wrapper);
         setList(videoList);
+        for (Video video : videoList) {
+            String name = video.getName();
+            if (name.lastIndexOf(".") != -1) {
+                name = name.substring(0,name.lastIndexOf("."));
+            }
+            if (name.indexOf("】") != -1) {
+                name = name.substring(name.indexOf("】") + 1);
+            }
+            video.setName(name);
+        }
         return videoList;
     }
 
@@ -153,6 +173,19 @@ public class VideoServiceImpl extends ServiceImpl<VideoMapper, Video> implements
             }
             videoList.add(video);
         }
+        for (Video video : videoList) {
+            if (StringUtils.isEmpty(video.getName())) {
+                continue;
+            }
+            String name = video.getName();
+            if (name.lastIndexOf(".") != -1) {
+                name = name.substring(0,name.lastIndexOf("."));
+            }
+            if (name.indexOf("】") != -1) {
+                name = name.substring(name.indexOf("】") + 1);
+            }
+            video.setName(name);
+        }
         return videoList;
     }
 
@@ -174,6 +207,9 @@ public class VideoServiceImpl extends ServiceImpl<VideoMapper, Video> implements
             if (util.getScore(first,video.getVideoId()) != null) {
                 video.setCount(BigDecimal.valueOf(util.getScore("video",video.getVideoId())));
             }
+            String name = video.getName();
+            name = name.substring(0,name.lastIndexOf("."));
+            video.setName(name);
         }
         return videoList;
     }
@@ -199,9 +235,10 @@ public class VideoServiceImpl extends ServiceImpl<VideoMapper, Video> implements
         SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd");
         Date now = new Date();
         String nowday = format.format(now);
-        String planday = format.format(planDate);
-        return nowday.equals(planday);
+        return nowday.equals(String.valueOf(new java.sql.Date(planDate.getTime())));
     }
+
+
 
 
     /**
@@ -283,5 +320,58 @@ public class VideoServiceImpl extends ServiceImpl<VideoMapper, Video> implements
         }
         return url;
     }
+
+
+    @Override
+    public List<VideoVo> getVideo(Plan plan, String key, int day) {
+        List<Video> videoList = getByClass2(plan.getName(),"day" + plan.getProgress());
+        if (videoList.size() == 0) {
+            return null;
+        }
+        List<VideoVo> res = new ArrayList<>();
+        for (Video video : videoList) {
+            if (util.getScore("video",video.getVideoId()) == null) {
+                util.addZset("video",video.getVideoId(),1);
+            } else {
+                util.incrementScore("video",video.getVideoId(),1);
+            }
+            VideoVo temp = new VideoVo();
+            temp.setName(video.getName());
+            temp.setUrl(video.getUrl());
+            temp.setCover(video.getCover());
+            temp.setCount(video.getCount());
+            temp.setPlanName(plan.getName());
+            temp.setExtent(plan.getExtent());
+            temp.setProgress(plan.getProgress());
+            temp.setPlanId(plan.getId());
+            res.add(temp);
+        }
+        if (plan.getProgress() + 1 == plan.getExtent()) {
+            plan.setComplete(1);
+        }
+        // 判断该天的计划是否已经进行增加
+        if (!isAdded(plan.getUpdatetime()) || plan.getProgress() == 1) {
+            plan.setProgress(plan.getProgress() + 1);
+            planService.updateById(plan);
+        }
+        return res;
+    }
+
+    @Override
+    public List<VideoVo> getAllVideo(List<Plan> planList, String openid, String date) {
+        List<VideoVo> res = new ArrayList<>();
+        for (Plan plan : planList) {
+            String key = date.substring(0,date.lastIndexOf('-')) + "+" + plan.getId() + openid;
+            int day = Integer.parseInt(date.substring(date.lastIndexOf('-') + 1));
+            List<VideoVo> temp = getVideo(plan,key,day);
+            if (temp == null) {
+                continue;
+            } else {
+                res.addAll(temp);
+            }
+        }
+        return res;
+    }
+
 
 }

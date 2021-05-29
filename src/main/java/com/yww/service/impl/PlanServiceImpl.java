@@ -43,7 +43,7 @@ public class PlanServiceImpl extends ServiceImpl<PlanMapper, Plan> implements Pl
         plan.setDate(plandto.getDate());
         plan.setExtent(getComplete(plan.getName()));
         plan.setCover(plandto.getCover());
-        plan.setProgress(0);
+        plan.setProgress(1);
         plan.setComplete(0);
         return plan;
     }
@@ -77,17 +77,34 @@ public class PlanServiceImpl extends ServiceImpl<PlanMapper, Plan> implements Pl
      * @throws ParseException   异常
      */
     @Override
-    public List<Integer> indexPlan(String id,String date) throws ParseException {
+    public List<Integer> indexPlan(String id, String date) throws ParseException {
         Plan plan = baseMapper.selectById(id);
+        // 计划剩余的天数
         int remains = plan.getExtent() - plan.getProgress();
+        // 位图的key
         String key = date.substring(0,date.lastIndexOf('-')) + "+" + id + plan.getOpenid();
+        // 该月有几天
         int count = getMonthDay(date.substring(0,date.lastIndexOf('-')));
+        // 日期的天数
         int day = Integer.parseInt(date.substring(date.lastIndexOf('-') + 1));
+        int flag = -1;
+        String create = String.valueOf(new java.sql.Date(plan.getCreatetime().getTime()));
+        if (completeDate(create,date.substring(0,date.lastIndexOf('-')) + "-01")) {
+            flag = 0;
+        } else {
+            flag = Integer.parseInt(create.substring(create.lastIndexOf("-") + 1)) - 1;
+        }
         List<Integer> res = new ArrayList<>();
+
         if (!util.isExistBitMap(key + "-0")) {
             createBitMap(key + "-0",plan.getDate(),count);
         }
-        for (int i = 0; i < count; i++) {
+        if (flag != 0) {
+            for (int i = 0; i < flag; i++) {
+                res.add(0);
+            }
+        }
+        for (int i = flag; i < count; i++) {
             if (util.checkSign(key + "-0",i) && i < remains) {
                 res.add(1);
             } else {
@@ -99,12 +116,77 @@ public class PlanServiceImpl extends ServiceImpl<PlanMapper, Plan> implements Pl
             if (util.checkSign(key + "-1",i) && res.get(i) == 1) {
                 res.set(i,2);
             // 3代表制定的计划没有完成
+            } else if(i == day - 1) {
+                res.set(i,1);
             } else if (!util.checkSign(key + "-1",i) && res.get(i) == 1) {
                 res.set(i,3);
             }
         }
         return res;
     }
+
+    @Override
+    public List<Integer> getIndexPlan1(List<Plan> planList,String date) throws ParseException {
+        List<Integer> res = indexPlan(planList.get(0).getId(),date);
+        int count = getMonthDay(date.substring(0,date.lastIndexOf('-')));
+        for (int i = 1; i < planList.size(); i++) {
+            List<Integer> temp = indexPlan(planList.get(i).getId(),date);
+            for (int j = 0; j < count; j++) {
+                if (res.get(j) == 0 && temp.get(j) != 0) {
+                    res.set(j,temp.get(j));
+                } else if (res.get(j) == 2 || temp.get(j) == 2) {
+                    res.set(j,2);
+                }
+            }
+        }
+        return res;
+    }
+
+    @Override
+    public List<Integer> getIndexPlan2(List<Plan> planList,String date) throws ParseException {
+        List<Integer> res1 = indexPlan(planList.get(0).getId(),date);
+        List<Integer> res2 = indexPlan(planList.get(1).getId(),date);
+        List<Integer> res = new ArrayList<>();
+        int count = getMonthDay(date.substring(0,date.lastIndexOf('-')));
+        for (int i = 0; i < count; i ++) {
+            if (res1.get(i) == 0 && res2.get(i) == 0) {
+                res.set(i,0);
+                continue;
+            }
+            if (res1.get(i) != 0 && res2.get(i) == 0) {
+                res.set(i,res1.get(i));
+                continue;
+            }
+            if (res1.get(i) == 0 && res2.get(i) != 0) {
+                res.set(i,res2.get(i));
+                continue;
+            }
+            if (res1.get(i) == 1 || res2.get(i) == 1) {
+                res.set(i,1);
+                continue;
+            }
+            if (res1.get(i) == 3 || res2.get(i) == 3) {
+                res.set(i,3);
+                continue;
+            }
+            if (res1.get(i) == 2 && res2.get(i) == 2) {
+                res.set(i,2);
+            }
+        }
+        return res;
+    }
+
+    private boolean completeDate(String one, String two) throws ParseException {
+        SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd");
+        Date date1 = format.parse(one);
+        Date date2 = format.parse(two);
+        if (date1.before(date2)) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
 
 
     /**
@@ -120,10 +202,9 @@ public class PlanServiceImpl extends ServiceImpl<PlanMapper, Plan> implements Pl
             map.put(c - '0',1);
         }
         String format = key.substring(0,key.lastIndexOf('+'));
-        System.out.println(format);
+
         for (int i = 0; i < count; i++) {
-            System.out.println(format + "-" + i);
-            if (map.containsKey(isDay(format + "-" + (i + 1)))) {
+            if (map.containsKey(isDay(format + "-" + (i)))) {
                 util.doSign(key,i);
             }
         }
@@ -141,7 +222,7 @@ public class PlanServiceImpl extends ServiceImpl<PlanMapper, Plan> implements Pl
         Date date = format.parse(formatDate);
         Calendar calendar = Calendar.getInstance();
         calendar.setTime(date);
-        int day = 0;
+        int day;
         if (calendar.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY) {
             day = 7;
         }else{
@@ -195,5 +276,7 @@ public class PlanServiceImpl extends ServiceImpl<PlanMapper, Plan> implements Pl
         list.add(vo4);
         return list;
     }
+
+
 
 }
